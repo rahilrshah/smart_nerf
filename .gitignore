@@ -1,0 +1,43 @@
+# --- General Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+env/
+*.egg-info/
+
+# --- Build artifacts ---
+# These are crucial for instant-ngp and neuralangelo
+build/
+dist/
+*.o
+*.so
+*.a
+
+# --- Datasets ---
+# NEVER commit large datasets to Git.
+# We will create an empty "data" folder but ignore its contents.
+data/
+datasets/
+
+# --- Results and Experiments ---
+# Do not commit large models, logs, or image outputs.
+experiments/
+results/
+output/
+logs/
+*.ingp
+*.pth
+*.pt
+*.obj
+*.ply
+*.mp4
+
+# --- OS / Editor specific ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
