@@ -1,0 +1,43 @@
+# requirements.txt
+#
+# This file lists the Python dependencies for the Intelligent 3D Capture project.
+# It combines requirements from Instant-NGP, Neuralangelo, and our custom scripts.
+#
+# --- IMPORTANT INSTALLATION NOTE ---
+# For CUDA compatibility, it is STRONGLY recommended to install PyTorch separately
+# BEFORE installing the rest of these requirements. See the project README for instructions.
+
+
+# --- Core ML & Numeric Libraries ---
+# Used by virtually all components.
+numpy
+scipy
+
+# --- From Instant-NGP (vendor/instant-ngp/requirements.txt) ---
+# Dependencies for the pyngp bindings and the interactive testbed.
+requests
+dearpygui   # For the Instant-NGP interactive GUI viewer
+
+# --- From Neuralangelo (vendor/neuralangelo/requirements.txt) ---
+# A comprehensive list for the SOTA meshing pipeline.
+ninja           # High-performance build system, used for custom CUDA extensions
+pyyaml          # For parsing .yaml configuration files
+einops          # For flexible tensor operations
+scikit-image
+h5py
+gdown           # For downloading pre-trained models or data from Google Drive
+tensorboard     # For logging training progress with Neuralangelo
+
+# --- Image and Video I/O ---
+# Used by Neuralangelo and our custom scripts (src/4_... and src/2_...).
+imageio
+imageio-ffmpeg
+opencv-python   # For image processing, specifically Laplacian variance in analyze_weakness.py
+
+# --- Visualization & Plotting (Our Custom Scripts) ---
+# Used by src/2_analyze_weakness.py to generate the uncertainty heatmap.
+matplotlib
+
+# --- General Utilities ---
+# Widely used for progress bars.
+tqdm
