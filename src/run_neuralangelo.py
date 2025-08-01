@@ -1,4 +1,4 @@
-# src/4_run_neuralangelo.py
+# src/run_neuralangelo.py
 
 import argparse
 import subprocess

@@ -4,12 +4,15 @@ import os
 import subprocess
 import argparse
 import shutil
+from pathlib import Path
 
-def run_command(command):
+def run_command(command, cwd="."):
     """Helper function to run a command and check for errors."""
     print(f"\n> Running command: {' '.join(command)}")
     try:
-        subprocess.run(command, check=True)
+        # Use shell=True on Windows for batch files and commands
+        is_shell_cmd = os.name == 'nt'
+        subprocess.run(command, check=True, cwd=cwd, shell=is_shell_cmd)
     except subprocess.CalledProcessError as e:
         print(f"\n--- ERROR ---")
         print(f"Command failed with exit code {e.returncode}")
@@ -23,22 +26,24 @@ def run_command(command):
         print("--- Pipeline Halted ---")
         exit()
 
-def pre_flight_checks():
+def pre_flight_checks(mode):
     """Check if necessary compiled files and directories exist."""
     print("--- Running Pre-flight Checks ---")
     checks_passed = True
     
-    # Check if Instant-NGP was compiled
-    if not os.path.exists("./vendor/instant-ngp/build/testbed"):
-        print("❌ ERROR: Instant-NGP testbed not found.")
-        print("  Please compile Instant-NGP by following its installation instructions inside 'vendor/instant-ngp'.")
-        checks_passed = False
+    # Check for the official training script
+    if mode in ['full', 'optimize_only']:
+        if not os.path.exists("./vendor/instant-ngp/scripts/run.py"):
+            print("❌ ERROR: Official training script not found at 'vendor/instant-ngp/scripts/run.py'.")
+            print("  Please ensure the Instant-NGP submodule is correctly cloned and up-to-date.")
+            checks_passed = False
 
-    # Check for a key Neuralangelo script (assumes it will be there after setup)
-    if not os.path.exists("./vendor/neuralangelo/projects/neuralangelo/train.py"):
-        print("❌ ERROR: Neuralangelo training script not found.")
-        print("  Please ensure the Neuralangelo submodule is correctly cloned in 'vendor/neuralangelo'.")
-        checks_passed = False
+    # Check for Neuralangelo only if we are planning to use it.
+    if mode in ['full', 'mesh_only']:
+        if not os.path.exists("./vendor/neuralangelo/projects/neuralangelo/train.py"):
+            print("❌ ERROR: Neuralangelo training script not found.")
+            print("  Please ensure the Neuralangelo submodule is correctly cloned.")
+            checks_passed = False
         
     if checks_passed:
         print("✅ All checks passed.")
@@ -48,76 +53,79 @@ def pre_flight_checks():
 def main(args):
     """Main function to orchestrate the pipeline."""
     
-    pre_flight_checks()
+    pre_flight_checks(args.mode)
     
     dataset_source_path = f"data/{args.dataset}"
     if not os.path.exists(dataset_source_path):
         print(f"❌ ERROR: Dataset source directory not found at '{dataset_source_path}'.")
         exit()
 
-    # Define the final optimized JSON path that the pipeline will produce
     results_dir = f"results/{args.dataset}"
     os.makedirs(results_dir, exist_ok=True)
     final_optimized_json = os.path.join(results_dir, "optimized_transforms.json")
 
-    # --- FULL PIPELINE MODE: DATASET OPTIMIZATION ---
-    if args.mode == "full":
+    if args.mode in ['full', 'optimize_only']:
         print("\n" + "="*50)
-        print("    STARTING: Full Intelligent Capture Pipeline")
+        print("    STARTING: Intelligent Dataset Optimization")
         print("="*50)
 
-        # --- Step 1: Create Initial Sparse Subset ---
+        # --- Step 1: Create Initial Sparse Subset (Our script) ---
         print("\n--- STEP 1: Creating Initial Sparse Dataset ---")
         current_run_name = "run_01_geom"
         current_run_path = f"experiments/{args.dataset}/{current_run_name}"
         
         cmd_step1 = [
-            "python", "src/1_create_initial_subset.py",
+            "python", "src/create_subset.py",
             "--dataset", args.dataset,
             "--num_images", str(args.initial_images),
             "--run_name", current_run_name
         ]
         run_command(cmd_step1)
         
-        # --- Steps 2 & 3: Iterative Analysis and Augmentation Loop ---
+        # --- Iterative Analysis and Augmentation Loop ---
         for i in range(1, args.max_iterations + 1):
-            print(f"\n--- ITERATION {i}/{args.max_iterations}: Analysis & Augmentation ---")
+            print(f"\n--- ITERATION {i}/{args.max_iterations}: Training & Analysis ---")
             
-            # Determine if we are in 'geometry' or 'detail' phase
-            if i < args.detail_start_iteration:
-                analysis_mode = "geometry"
-                n_steps = args.steps_geometry
-            else:
-                analysis_mode = "detail"
-                n_steps = args.steps_detail
-            print(f"Current analysis mode: {analysis_mode.upper()}")
-
-            # Step 2: Analyze weakness
-            cmd_step2 = [
-                "python", "src/2_analyze_weakness.py",
-                "--run_path", current_run_path,
-                "--mode", analysis_mode,
-                "--n_steps", str(n_steps)
+            # --- Step 2a: Train scout model (Official script) ---
+            print("Step 2a: Training scout model with official Instant-NGP script...")
+            scene_json_path = os.path.abspath(os.path.join(current_run_path, "transforms.json"))
+            snapshot_path = os.path.abspath(os.path.join(current_run_path, "scout_model/scout.ingp"))
+            os.makedirs(os.path.dirname(snapshot_path), exist_ok=True)
+            
+            cmd_train = [
+                "python",
+                os.path.abspath("./vendor/instant-ngp/scripts/run.py"),
+                "--scene", scene_json_path,
+                "--save_snapshot", snapshot_path,
+                "--n_steps", str(args.steps_geometry) # Use the official script's argument
             ]
-            run_command(cmd_step2)
+            run_command(cmd_train)
 
-            # Check if we should stop iterating
+            # --- Step 2b: Analyze model for weaknesses (Our script) ---
+            print("Step 2b: Analyzing scout model for weaknesses...")
+            analysis_mode = "geometry" if i < args.detail_start_iteration else "detail"
+            cmd_analyze = [
+                "python", "src/analyze_weakness.py",
+                "--run_path", current_run_path,
+                "--mode", analysis_mode
+            ]
+            run_command(cmd_analyze)
+
+            # Step 3: Augment dataset (Our script)
             recommendations_file = os.path.join(current_run_path, "recommended_images.txt")
             if not os.path.exists(recommendations_file) or os.path.getsize(recommendations_file) == 0:
                 print("\n✅ Analysis complete. No more images recommended. Exiting optimization loop.")
                 break
             
-            # If this was the last iteration, don't create the next folder
             if i == args.max_iterations:
                 print("\nReached max iterations. Exiting optimization loop.")
                 break
 
-            # Step 3: Augment dataset for the next run
             next_mode = "detail" if (i + 1) >= args.detail_start_iteration else "geom"
             next_run_name = f"run_{i+1:02d}_{next_mode}"
             
             cmd_step3 = [
-                "python", "src/3_augment_dataset.py",
+                "python", "src/augment_dataset.py",
                 "--previous_run", current_run_path,
                 "--new_run_name", next_run_name
             ]
@@ -125,7 +133,6 @@ def main(args):
             
             current_run_path = f"experiments/{args.dataset}/{next_run_name}"
         
-        # --- Post-Loop: Finalize the optimized set ---
         print("\n--- OPTIMIZATION COMPLETE ---")
         print(f"The best dataset was generated in: '{current_run_path}'")
         
@@ -133,21 +140,20 @@ def main(args):
         shutil.copy(source_json, final_optimized_json)
         print(f"✅ Copied final optimized dataset to '{final_optimized_json}'")
 
-    # --- MESHING MODE: Can be run as part of 'full' or standalone ---
-    if "mesh" in args.mode:
+    # The meshing logic (Step 4) can remain the same
+    if args.mode in ['full', 'mesh_only']:
         print("\n" + "="*50)
         print("    STARTING: 3D Mesh Generation with Neuralangelo")
         print("="*50)
         
         if not os.path.exists(final_optimized_json):
             print(f"❌ ERROR: Cannot run meshing. Optimized file not found at '{final_optimized_json}'.")
-            print("  Please run the 'full' pipeline first, or place the file there manually.")
+            print("  Please run the 'full' or 'optimize_only' pipeline first.")
             exit()
             
-        # --- Step 4: Run Neuralangelo ---
         print("\n--- STEP 4: Launching Neuralangelo Pipeline ---")
         cmd_step4 = [
-            "python", "src/4_run_neuralangelo.py",
+            "python", "src/run_neuralangelo.py",
             "--optimized_json", final_optimized_json,
             "--output_base", "results"
         ]
@@ -160,16 +166,15 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Master pipeline controller for the Intelligent 3D Capture project.")
     parser.add_argument("--dataset", required=True, help="Name of the dataset folder inside 'data/'.")
-    parser.add_argument("--mode", choices=['full', 'mesh_only'], default='full', 
-                        help="'full': Run optimization and meshing. 'mesh_only': Run only Neuralangelo on an existing optimized set.")
+    parser.add_argument("--mode", choices=['full', 'optimize_only', 'mesh_only'], default='full', 
+                        help="'full': Run optimization and meshing. 'optimize_only': Run only the dataset optimization. 'mesh_only': Run only meshing.")
     
-    # --- Optimization Loop Parameters ---
-    parser.add_argument("--initial_images", type=int, default=15, help="Number of images to start the optimization with.")
-    parser.add_argument("--max_iterations", type=int, default=4, help="Maximum number of improvement iterations.")
+    parser.add_argument("--initial_images", type=int, default=15, help="Number of images to start with.")
+    parser.add_argument("--max_iterations", type=int, default=2, help="Maximum number of improvement iterations.")
     parser.add_argument("--detail_start_iteration", type=int, default=2, 
                         help="At which iteration to switch from 'geometry' to 'detail' analysis.")
+    # Arguments for the official training script
     parser.add_argument("--steps_geometry", type=int, default=3500, help="Training steps for the geometry analysis phase.")
-    parser.add_argument("--steps_detail", type=int, default=15000, help="Training steps for the detail analysis phase.")
     
     args = parser.parse_args()
     main(args)
