@@ -17,6 +17,7 @@ scipy
 # Dependencies for the pyngp bindings and the interactive testbed.
 requests
 dearpygui   # For the Instant-NGP interactive GUI viewer
+commentjson
 
 # --- From Neuralangelo (vendor/neuralangelo/requirements.txt) ---
 # A comprehensive list for the SOTA meshing pipeline.
