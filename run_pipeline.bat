@@ -3,21 +3,23 @@ ECHO =======================================================
 ECHO   Initializing Smart NeRF Pipeline Environment...
 ECHO =======================================================
 
-REM This command activates your conda environment and sets up all necessary paths.
-REM The "call" is essential - it ensures the script continues after activation.
+REM This command activates your conda environment.
 call conda activate smart_nerf
-
-REM Check if activation was successful
 if %errorlevel% neq 0 (
     echo.
     echo ERROR: Failed to activate the 'smart_nerf' Conda environment.
-    echo Please make sure you have created the environment correctly.
     pause
     exit /b %errorlevel%
 )
 
+REM --- THE CRITICAL NEURALANGELO FIX ---
+REM Add the Conda environment's library binaries to the system PATH.
+REM This ensures that when our Python script calls Neuralangelo's training script,
+REM it can find all the necessary PyTorch and CUDA DLLs.
+set PATH=%CONDA_PREFIX%\Library\bin;%PATH%
+
 ECHO.
-ECHO Environment activated successfully.
+ECHO Environment activated and PATH configured successfully.
 ECHO =======================================================
 ECHO   Starting the Python Master Script...
 ECHO =======================================================
