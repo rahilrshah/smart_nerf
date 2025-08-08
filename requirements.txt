@@ -28,6 +28,7 @@ scikit-image
 h5py
 gdown           # For downloading pre-trained models or data from Google Drive
 tensorboard     # For logging training progress with Neuralangelo
+termcolor       # For colored terminal output
 
 # --- Image and Video I/O ---
 # Used by Neuralangelo and our custom scripts (src/4_... and src/2_...).
