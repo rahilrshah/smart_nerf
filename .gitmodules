@@ -1,3 +1,6 @@
+﻿[submodule "vendor/instant-ngp"]
+        path = vendor/instant-ngp
+        url = https://github.com/NVlabs/instant-ngp.git
 [submodule "vendor/neuralangelo"]
-	path = vendor/neuralangelo
-	url = https://github.com/NVlabs/neuralangelo.git
+        path = vendor/neuralangelo
+        url = https://github.com/NVlabs/neuralangelo.git
