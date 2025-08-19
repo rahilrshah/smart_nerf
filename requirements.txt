@@ -1,45 +1,57 @@
-# requirements.txt
+# requirements_unified.txt
 #
-# This file lists the Python dependencies for the Intelligent 3D Capture project.
-# It combines requirements from Instant-NGP, Neuralangelo, and our custom scripts.
+# Unified requirements file for the Intelligent 3D Capture project.
+# This combines dependencies for Instant-NGP, Nerfstudio, and custom scripts
+# into a single environment.
 #
-# --- IMPORTANT INSTALLATION NOTE ---
-# For CUDA compatibility, it is STRONGLY recommended to install PyTorch separately
-# BEFORE installing the rest of these requirements. See the project README for instructions.
+# --- IMPORTANT INSTALLATION NOTES ---
+# 1. Install PyTorch with CUDA support FIRST:
+#    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+#
+# 2. Install Nerfstudio SECOND (it will handle many ML dependencies):
+#    pip install nerfstudio
+#
+# 3. Then install the remaining requirements from this file:
+#    pip install -r requirements_unified.txt
 
 
 # --- Core ML & Numeric Libraries ---
-# Used by virtually all components.
-numpy
-scipy
+# Many of these are automatically installed by Nerfstudio, but listed for completeness
+numpy>=1.21.0
+scipy>=1.7.0
 
-# --- From Instant-NGP (vendor/instant-ngp/requirements.txt) ---
-# Dependencies for the pyngp bindings and the interactive testbed.
-requests
-dearpygui   # For the Instant-NGP interactive GUI viewer
-commentjson
+# --- Instant-NGP Specific Dependencies ---
+# These are not typically included with Nerfstudio
+requests>=2.25.0
+dearpygui>=1.6.0      # For the Instant-NGP interactive GUI viewer
+commentjson>=1.2.0    # For parsing .jsonc files
 
-# --- From Neuralangelo (vendor/neuralangelo/requirements.txt) ---
-# A comprehensive list for the SOTA meshing pipeline.
-ninja           # High-performance build system, used for custom CUDA extensions
-pyyaml          # For parsing .yaml configuration files
-einops          # For flexible tensor operations
-scikit-image
-h5py
-gdown           # For downloading pre-trained models or data from Google Drive
-tensorboard     # For logging training progress with Neuralangelo
-termcolor       # For colored terminal output
+# --- Mesh Processing Libraries ---
+# Essential for mesh generation and processing
+open3d>=0.15.0        # 3D data processing and visualization
+pymeshlab>=2022.2     # Advanced mesh processing operations
+
+# --- Additional ML & Tensor Libraries ---
+ninja>=1.10.0         # High-performance build system for CUDA extensions
+pyyaml>=5.4.0         # For parsing .yaml configuration files
+einops>=0.4.0         # For flexible tensor operations
+scikit-image>=0.18.0  # Image processing utilities
+h5py>=3.1.0           # For HDF5 file format support
 
 # --- Image and Video I/O ---
-# Used by Neuralangelo and our custom scripts (src/4_... and src/2_...).
-imageio
-imageio-ffmpeg
-opencv-python   # For image processing, specifically Laplacian variance in analyze_weakness.py
+imageio>=2.9.0        # Image reading/writing
+imageio-ffmpeg>=0.4.0 # Video codec support
+opencv-python>=4.5.0  # Computer vision and image processing
 
-# --- Visualization & Plotting (Our Custom Scripts) ---
-# Used by src/2_analyze_weakness.py to generate the uncertainty heatmap.
-matplotlib
+# --- Visualization & Logging ---
+matplotlib>=3.3.0     # Plotting and visualization
+tensorboard>=2.7.0    # Training progress logging and visualization
 
 # --- General Utilities ---
-# Widely used for progress bars.
-tqdm
+tqdm>=4.60.0          # Progress bars
+termcolor>=1.1.0      # Colored terminal output
+
+# --- Optional but Recommended ---
+# These can help with debugging and development
+ipython>=7.20.0       # Better interactive Python shell
+jupyter>=1.0.0        # For notebook-based development and analysis

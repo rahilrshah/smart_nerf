@@ -1,4 +1,5 @@
-# src/2_analyze_weakness_parallel.py
+# src/analyze_weakness_realtime.py
+# Modified weakness analysis with real-time capture integration and adaptive sampling
 
 import sys
 import os
@@ -17,6 +18,18 @@ import time
 from typing import List, Dict, Tuple, Optional
 import tempfile
 import shutil
+
+# Import the new real-time capture system
+try:
+    from camera_position_controller import (
+        RealTimeCaptureSystem, 
+        AdaptiveViewpointGenerator,
+        integrate_with_weakness_analysis
+    )
+    REALTIME_AVAILABLE = True
+except ImportError:
+    print("Real-time capture system not available. Running in analysis-only mode.")
+    REALTIME_AVAILABLE = False
 
 def find_executable():
     """Finds the correct path to the Instant-NGP executable."""
@@ -251,24 +264,43 @@ class WeaknessAnalyzer:
         else:  # detail mode
             return self.calculate_detail_score(rgba_image)
 
-def generate_viewpoints(n_views: int, radius: float) -> List[Tuple[int, np.ndarray, Tuple[float, float]]]:
-    """Generate viewpoint data for rendering."""
-    viewpoints = []
-    for i in range(n_views):
-        # Fibonacci sphere distribution for even coverage
-        phi = np.arccos(1 - 2 * (i + 0.5) / n_views)
-        theta = np.pi * (1 + 5**0.5) * i
+def generate_viewpoints_adaptive(n_views: int, radius: float, iteration: int = 0, 
+                               capture_system: Optional['RealTimeCaptureSystem'] = None) -> List[Tuple[int, np.ndarray, Tuple[float, float]]]:
+    """Generate adaptive viewpoints that change each iteration to avoid overfitting."""
+    if REALTIME_AVAILABLE and capture_system:
+        # Use adaptive viewpoint generation
+        return capture_system.generate_adaptive_probe_viewpoints(n_views)
+    else:
+        # Fallback to modified fibonacci with iteration-based variation
+        viewpoints = []
         
-        cam_pos_cartesian = np.array([
-            radius * np.cos(theta) * np.sin(phi),
-            radius * np.sin(theta) * np.sin(phi), 
-            radius * np.cos(phi)
-        ])
+        # Add iteration-based offset to vary sampling pattern
+        iteration_offset = iteration * 0.618034  # Golden ratio for good distribution
         
-        cam_matrix = look_at(cam_pos_cartesian)
-        viewpoints.append((i, cam_matrix, (theta, phi)))
-    
-    return viewpoints
+        for i in range(n_views):
+            # Modified Fibonacci sphere with iteration-based perturbation
+            phi_base = np.arccos(1 - 2 * (i + 0.5) / n_views)
+            theta_base = np.pi * (1 + 5**0.5) * i
+            
+            # Add controlled randomization that changes with iteration
+            np.random.seed(iteration * 1000 + i)  # Deterministic but iteration-dependent
+            theta_perturb = np.random.normal(0, 0.1) * (iteration + 1) / 5
+            phi_perturb = np.random.normal(0, 0.05) * (iteration + 1) / 5
+            
+            theta = theta_base + theta_perturb + iteration_offset
+            phi = np.clip(phi_base + phi_perturb, 0.1, np.pi - 0.1)
+            
+            cam_pos_cartesian = np.array([
+                radius * np.cos(theta) * np.sin(phi),
+                radius * np.sin(theta) * np.sin(phi), 
+                radius * np.cos(phi)
+            ])
+            
+            cam_matrix = look_at(cam_pos_cartesian)
+            viewpoints.append((i, cam_matrix, (theta, phi)))
+        
+        print(f"Generated {n_views} viewpoints using adaptive pattern for iteration {iteration}")
+        return viewpoints
 
 def render_viewpoints_parallel(renderer: ViewpointRenderer, viewpoints: List, max_workers: int = 4, batch_size: int = 8) -> List[Tuple[int, Optional[str], Tuple[float, float]]]:
     """Render viewpoints in parallel batches."""
@@ -308,12 +340,14 @@ def render_viewpoints_parallel(renderer: ViewpointRenderer, viewpoints: List, ma
     
     return results
 
-def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_workers=4, batch_size=8, n_test_views=128):
+def analyze_weakness_realtime(run_path, full_dataset_json_path, mode, max_recs, max_workers=4, 
+                            batch_size=8, n_test_views=128, iteration=0, printer_config_path=None,
+                            enable_realtime=False):
     """
-    Parallel analysis with enhanced scoring and ranking.
+    Enhanced weakness analysis with real-time capture integration and adaptive sampling.
     """
-    print(f"--- Analyzing weakness for run: {run_path} ---")
-    print(f"--- Mode: '{mode.upper()}' | Workers: {max_workers} | Batch Size: {batch_size} ---")
+    print(f"--- Real-time Weakness Analysis for run: {run_path} ---")
+    print(f"--- Mode: '{mode.upper()}' | Iteration: {iteration} | Workers: {max_workers} ---")
     
     analysis_dir = os.path.join(run_path, "analysis")
     os.makedirs(analysis_dir, exist_ok=True)
@@ -335,10 +369,22 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
     camera_angle_x = training_data.get("camera_angle_x", 0.691111)
     
     print(f"Using camera sphere radius: {radius:.2f}")
-    print(f"Analyzing {n_test_views} viewpoints...")
+    print(f"Analyzing {n_test_views} viewpoints with adaptive sampling...")
 
-    # Generate viewpoints
-    viewpoints = generate_viewpoints(n_test_views, radius)
+    # Initialize real-time capture system if available and enabled
+    capture_system = None
+    if REALTIME_AVAILABLE and enable_realtime and printer_config_path:
+        try:
+            with open(printer_config_path, 'r') as f:
+                printer_config = json.load(f)
+            capture_system = RealTimeCaptureSystem(printer_config)
+            capture_system.iteration_count = iteration
+            print("✅ Real-time capture system initialized")
+        except Exception as e:
+            print(f"⚠️ Could not initialize real-time capture: {e}")
+
+    # Generate adaptive viewpoints (changes each iteration to avoid overfitting)
+    viewpoints = generate_viewpoints_adaptive(n_test_views, radius, iteration, capture_system)
     
     # Initialize renderer and analyzer
     renderer = ViewpointRenderer(snapshot_path, scene_json_path, official_script_path, 
@@ -346,7 +392,7 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
     analyzer = WeaknessAnalyzer(mode)
     
     # Render viewpoints in parallel
-    print("Step 2.1: Rendering viewpoints in parallel...")
+    print("Step 2.1: Rendering adaptive viewpoints in parallel...")
     render_results = render_viewpoints_parallel(renderer, viewpoints, max_workers, batch_size)
     
     # Analyze rendered images
@@ -423,7 +469,7 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
         
         # Main heatmap
         cax1 = ax1.imshow(grid_uncertainty.T, extent=[360, 0, 180, 0], cmap='plasma', origin='upper', aspect='auto')
-        ax1.set_title(f"Model Uncertainty Heatmap (Mode: {mode.upper()})")
+        ax1.set_title(f"Model Uncertainty Heatmap (Mode: {mode.upper()}, Iteration: {iteration})")
         ax1.set_xlabel("Theta (Azimuth)")
         ax1.set_ylabel("Phi (Inclination)")
         fig.colorbar(cax1, ax=ax1, label="Uncertainty Score")
@@ -452,21 +498,29 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
             ax2.set_title("Average Weakness Components")
             ax2.set_ylabel("Weakness Score")
         
-        heatmap_path = os.path.join(analysis_dir, f"enhanced_uncertainty_heatmap_{mode}.png")
+        heatmap_path = os.path.join(analysis_dir, f"uncertainty_heatmap_{mode}_iter{iteration}.png")
         plt.tight_layout()
         plt.savefig(heatmap_path, bbox_inches='tight', dpi=150)
         plt.close(fig)
         print(f"Enhanced heatmap saved to {heatmap_path}")
     
-    # Find best candidate images
+    # Find best candidate images (traditional dataset augmentation)
     if not weak_views:
         print("No weak viewpoints identified. Creating empty recommendations.")
         output_rec_path = os.path.join(run_path, "recommended_images.txt")
         open(output_rec_path, 'w').close()
+        
+        # Still save metadata for real-time capture
+        if REALTIME_AVAILABLE and capture_system and enable_realtime:
+            camera_positions = capture_system.extract_camera_positions_from_weakness_analysis([])
+            positions_output = Path(run_path) / "camera_positions.json"
+            capture_system.save_camera_positions_for_printer(camera_positions, str(positions_output))
+        
         return
     
-    print("Step 4: Finding best candidate images from full dataset...")
+    print("Step 4: Processing recommendations for both traditional and real-time capture...")
     
+    # Traditional dataset augmentation
     with open(full_dataset_json_path, 'r') as f:
         full_frames = json.load(f)['frames']
     source_base_dir = Path(full_dataset_json_path).parent
@@ -516,7 +570,8 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
                 'path': best_candidate[0],
                 'priority_score': weak_view['priority_score'],
                 'weakness_components': weak_view['analysis']['components'],
-                'distance': min_dist
+                'distance': min_dist,
+                'spherical_pos': weak_view['spherical_pos']  # Include for real-time capture
             })
             used_candidates.add(best_candidate[0])
     
@@ -526,7 +581,7 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
     if max_recs > 0:
         recommendations = recommendations[:max_recs]
     
-    # Save recommendations with metadata
+    # Save traditional recommendations
     output_rec_path = os.path.join(run_path, "recommended_images.txt")
     metadata_path = os.path.join(analysis_dir, "recommendation_metadata.json")
     
@@ -537,14 +592,44 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
     # Save detailed metadata
     metadata = {
         'mode': mode,
+        'iteration': iteration,
         'n_test_views': n_test_views,
         'n_weak_views': len(weak_views),
         'n_recommendations': len(recommendations),
-        'recommendations': recommendations
+        'recommendations': recommendations,
+        'adaptive_sampling': True,
+        'realtime_enabled': enable_realtime and REALTIME_AVAILABLE
     }
     
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2, default=str)
+    
+    # Real-time capture integration
+    if REALTIME_AVAILABLE and capture_system and enable_realtime:
+        print("Step 5: Generating real-time capture positions...")
+        
+        # Convert weak viewpoints to camera positions
+        camera_positions = capture_system.extract_camera_positions_from_weakness_analysis(weak_views[:max_recs])
+        
+        # Save camera positions for printer
+        positions_output = Path(run_path) / "camera_positions.json"
+        capture_system.save_camera_positions_for_printer(camera_positions, str(positions_output))
+        
+        # Optionally execute capture sequence
+        if printer_config_path:
+            with open(printer_config_path, 'r') as f:
+                printer_config = json.load(f)
+            
+            if printer_config.get('auto_capture', False):
+                print("Step 6: Executing automated capture sequence...")
+                success = capture_system.execute_capture_sequence(camera_positions)
+                if success:
+                    print("✅ Automated capture completed successfully")
+                else:
+                    print("❌ Automated capture failed")
+        
+        # Increment iteration counter for next run
+        capture_system.increment_iteration()
     
     print(f"Saved {len(recommendations)} recommendations to {output_rec_path}")
     print(f"Saved detailed metadata to {metadata_path}")
@@ -555,21 +640,31 @@ def analyze_weakness(run_path, full_dataset_json_path, mode, max_recs, max_worke
         for i, rec in enumerate(recommendations[:5], 1):
             print(f"{i}. Priority Score: {rec['priority_score']:.3f}, Distance: {rec['distance']:.2f}")
     
-    print("--- Enhanced weakness analysis complete ---")
+    if REALTIME_AVAILABLE and enable_realtime:
+        print("--- Enhanced real-time weakness analysis complete ---")
+    else:
+        print("--- Traditional weakness analysis complete ---")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Analyze a pre-trained NGP model for weaknesses (parallel version).")
+    parser = argparse.ArgumentParser(description="Enhanced weakness analysis with real-time capture integration.")
     parser.add_argument("--run_path", required=True)
     parser.add_argument("--mode", choices=['geometry', 'detail'], default='geometry')
     parser.add_argument("--max_recommendations", type=int, default=10, help="Maximum number of new images to recommend per iteration. Set to 0 for unlimited.")
     parser.add_argument("--max_workers", type=int, default=4, help="Maximum number of parallel rendering workers.")
     parser.add_argument("--batch_size", type=int, default=8, help="Number of viewpoints to render simultaneously.")
     parser.add_argument("--n_test_views", type=int, default=128, help="Total number of viewpoints to test.")
+    parser.add_argument("--iteration", type=int, default=0, help="Current iteration number for adaptive sampling.")
+    
+    # Real-time capture arguments
+    parser.add_argument("--enable_realtime", action='store_true', help="Enable real-time capture integration.")
+    parser.add_argument("--printer_config", type=str, help="Path to printer configuration JSON file.")
+    
     args = parser.parse_args()
     
     dataset_name = Path(args.run_path).parts[1]
     full_json_path = f"data/{dataset_name}/transforms_train.json"
     
-    analyze_weakness(args.run_path, full_json_path, args.mode, args.max_recommendations, 
-                    args.max_workers, args.batch_size, args.n_test_views)
+    analyze_weakness_realtime(args.run_path, full_json_path, args.mode, args.max_recommendations, 
+                            args.max_workers, args.batch_size, args.n_test_views, args.iteration,
+                            args.printer_config, args.enable_realtime)

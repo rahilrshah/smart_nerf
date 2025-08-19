@@ -1,0 +1,121 @@
+{
+  "printer_info": {
+    "model": "Bambu Lab X1 Carbon",
+    "firmware_version": "1.5.0",
+    "bed_size_x": 256,
+    "bed_size_y": 256,
+    "max_z": 256,
+    "nozzle_diameter": 0.4
+  },
+  
+  "object_setup": {
+    "object_height": 50,
+    "object_center_x": 128,
+    "object_center_y": 128,
+    "object_center_z": 25,
+    "bounding_box": {
+      "min_x": 100,
+      "max_x": 156,
+      "min_y": 100,
+      "max_y": 156,
+      "min_z": 0,
+      "max_z": 50
+    }
+  },
+  
+  "camera_setup": {
+    "capture_radius": 150,
+    "min_camera_distance": 100,
+    "max_camera_distance": 300,
+    "camera_mount_offset": {
+      "x": 0,
+      "y": 0,
+      "z": 20
+    }
+  },
+  
+  "gimbal_config": {
+    "pan_servo_pin": 0,
+    "tilt_servo_pin": 1,
+    "pan_range": [-180, 180],
+    "tilt_range": [-90, 45],
+    "servo_speed": 100,
+    "stabilization_delay": 2.0
+  },
+  
+  "motion_settings": {
+    "travel_speed": 3000,
+    "positioning_speed": 1500,
+    "acceleration": 500,
+    "jerk": 10,
+    "z_hop_height": 5
+  },
+  
+  "safety_limits": {
+    "min_bed_margin": 10,
+    "max_bed_margin": 10,
+    "collision_detection": true,
+    "emergency_stop_pin": 3,
+    "safe_z_height": 100
+  },
+  
+  "connectivity": {
+    "connection_type": "serial",
+    "serial_port": "COM3",
+    "baud_rate": 115200,
+    "timeout": 5.0,
+    "retry_attempts": 3
+  },
+  
+  "capture_settings": {
+    "auto_capture": false,
+    "capture_trigger_pin": 2,
+    "capture_delay": 1.0,
+    "preview_mode": true,
+    "image_quality": "high",
+    "focus_mode": "auto"
+  },
+  
+  "lighting": {
+    "led_ring_pin": 4,
+    "brightness": 80,
+    "auto_adjust": true,
+    "color_temperature": 5500
+  },
+  
+  "advanced": {
+    "coordinate_system": "bed_relative",
+    "origin_offset": [0, 0, 0],
+    "rotation_compensation": 0.0,
+    "thermal_expansion_compensation": true,
+    "vibration_dampening": true,
+    "adaptive_sampling": {
+      "enable": true,
+      "pattern_rotation": true,
+      "overfitting_prevention": true,
+      "min_pattern_variation": 0.1
+    }
+  },
+  
+  "calibration": {
+    "bed_level_points": [
+      [10, 10], [128, 10], [246, 10],
+      [10, 128], [128, 128], [246, 128],
+      [10, 246], [128, 246], [246, 246]
+    ],
+    "gimbal_calibration_positions": [
+      {"pan": 0, "tilt": 0},
+      {"pan": 90, "tilt": 0},
+      {"pan": -90, "tilt": 0},
+      {"pan": 0, "tilt": 30},
+      {"pan": 0, "tilt": -30}
+    ],
+    "reference_object_size": [40, 40, 30],
+    "camera_intrinsics": {
+      "focal_length": 24.0,
+      "sensor_width": 23.5,
+      "sensor_height": 15.6,
+      "resolution": [1920, 1080]
+    }
+  }
+}
